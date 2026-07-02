@@ -50,11 +50,11 @@ pipeline {
                 -Dsonar.projectKey=cicd-tasklist-frontend ^
                 -Dsonar.projectName=cicd-tasklist-frontend ^
                 -Dsonar.sources=src ^
-                -Dsonar.tests=src/__tests__ ^
+                -Dsonar.test.inclusions=src/__tests__/**/*.ts ^
                 -Dsonar.language=ts ^
                 -Dsonar.sourceEncoding=UTF-8 ^
                 -Dsonar.host.url=${SONAR_HOST_URL} ^
-                -Dsonar.login=%SONAR_TOKEN% ^
+                -Dsonar.token=%SONAR_TOKEN% ^
                 -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/** ^
                 -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             """
