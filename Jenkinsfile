@@ -5,7 +5,7 @@ pipeline {
     NODE_ENV = 'test'
     DOCKER_IMAGE = 'thibaultlefay/tasklist-frontend:latest'
     SONAR_HOST_URL = 'http://localhost:9000'
-    PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.nvm/versions/node/v20.0.0/bin"
+    NVM_DIR = "${HOME}/.nvm"
   }
 
   stages {
@@ -15,38 +15,60 @@ pipeline {
       }
     }
 
-    stage('Setup Node.js') {
+    stage('Setup Node.js with NVM') {
       steps {
-        script {
-          sh '''
-            # Check if node is installed
-            if ! command -v node &> /dev/null; then
-              echo "Installing Node.js..."
-              curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
-              apt-get update && apt-get install -y nodejs || true
-            fi
-            node --version
-            npm --version
-          '''
-        }
+        sh '''
+          # Install NVM if not present
+          if [ ! -d "$NVM_DIR" ]; then
+            echo "Installing NVM..."
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+          fi
+          
+          # Load NVM
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          
+          # Install Node.js 20
+          nvm install 20
+          nvm use 20
+          
+          # Verify installation
+          node --version
+          npm --version
+        '''
       }
     }
 
     stage('Install dependencies') {
       steps {
-        sh 'npm ci'
+        sh '''
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm use 20
+          npm ci
+        '''
       }
     }
 
     stage('Run tests') {
       steps {
-        sh 'npm test -- --run --coverage || true'
+        sh '''
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm use 20
+          npm test -- --run --coverage || true
+        '''
       }
     }
 
     stage('Build frontend') {
       steps {
-        sh 'npm run build'
+        sh '''
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm use 20
+          npm run build
+        '''
       }
     }
 
@@ -55,11 +77,9 @@ pipeline {
         script {
           withCredentials([string(credentialsId: 'sonar-frontend-token', variable: 'SONAR_TOKEN')]) {
             sh '''
-              # Install sonar-scanner if not present
-              if ! command -v sonar-scanner &> /dev/null; then
-                echo "Installing sonar-scanner..."
-                npm install -g sonarqube-scanner || true
-              fi
+              export NVM_DIR="$HOME/.nvm"
+              [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+              nvm use 20
               
               npx sonar-scanner \
                 -Dsonar.projectKey=cicd-tasklist-frontend \
@@ -81,16 +101,13 @@ pipeline {
     stage('Security scan with Trivy') {
       steps {
         sh '''
-          # Install trivy if not present
+          # Check if trivy is installed, if not install via docker
           if ! command -v trivy &> /dev/null; then
-            echo "Installing Trivy..."
-            apt-get update && apt-get install -y wget apt-transport-https gnupg lsb-release || true
-            wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add - || true
-            echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | tee -a /etc/apt/sources.list.d/trivy.list || true
-            apt-get update && apt-get install -y trivy || true
+            echo "Trivy not found, using Docker..."
+            docker run --rm -v $(pwd):/root aquasec/trivy fs /root --exit-code 0 --format table || true
+          else
+            trivy fs --exit-code 0 --format table . || true
           fi
-          
-          trivy fs --exit-code 0 --format table . || true
         '''
       }
     }
@@ -103,7 +120,13 @@ pipeline {
 
     stage('Security scan Docker image with Trivy') {
       steps {
-        sh 'trivy image --exit-code 0 --format table $DOCKER_IMAGE || true'
+        sh '''
+          if ! command -v trivy &> /dev/null; then
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --exit-code 0 --format table $DOCKER_IMAGE || true
+          else
+            trivy image --exit-code 0 --format table $DOCKER_IMAGE || true
+          fi
+        '''
       }
     }
 
@@ -126,10 +149,10 @@ pipeline {
       junit testResults: 'reports/junit.xml', allowEmptyResults: true
     }
     success {
-      echo ' Pipeline completed successfully!'
+      echo ' Frontend Pipeline completed successfully!'
     }
     failure {
-      echo ' Pipeline failed!'
+      echo ' Frontend Pipeline failed!'
     }
   }
 }
