@@ -55,5 +55,18 @@ describe('TaskList', () => {
 		expect(screen.getByText('2 tâches')).toBeInTheDocument();
 	});
 
-	// ... TODO: Add more tests
+	it('shows error state', () => {
+		render(
+			<TaskList
+				tasks={[]}
+				loading={false}
+				error="Erreur réseau"
+				onToggle={vi.fn()}
+				onDelete={vi.fn()}
+				onEdit={vi.fn()}
+			/>
+		);
+		expect(screen.getByTestId('error')).toBeInTheDocument();
+		expect(screen.getByText('Erreur : Erreur réseau')).toBeInTheDocument();
+	});
 });

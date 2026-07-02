@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getTasks, createTask, updateTask, deleteTask } from '../api/taskApi';
+import { getTasks, createTask } from '../api/taskApi';
 
 const mockTask = {
 	id: 1,
@@ -29,5 +29,18 @@ describe('taskApi', () => {
 		expect(fetch).toHaveBeenCalledWith('/api/tasks');
 	});
 
-	// ... TODO: Add more tests
+	it('createTask sends a POST request and returns the created task', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				json: () => Promise.resolve(mockTask),
+			})
+		);
+
+		const createdTask = await createTask({ title: 'New task', description: 'desc' });
+
+		expect(createdTask).toEqual(mockTask);
+		expect(fetch).toHaveBeenCalledWith('/api/tasks', expect.objectContaining({ method: 'POST' }));
+	});
 });
